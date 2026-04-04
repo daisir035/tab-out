@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Mission Control",
+  "version": "1.0.0",
+  "description": "Your browsing mission dashboard — replaces new tab page",
+  "permissions": ["tabs", "activeTab", "storage"],
+  "chrome_url_overrides": { "newtab": "newtab.html" },
+  "background": { "service_worker": "background.js" },
+  "action": { "default_title": "Mission Control" }
+}
