@@ -1156,3 +1156,260 @@ footer { animation: fadeUp 0.5s ease 0.65s both; }
   opacity: 0.6;
   flex-shrink: 0;
 }
+
+/* ============================================================
+   ChiefDelphi Section Styles
+   ============================================================ */
+
+.cd-section {
+  margin-bottom: 48px;
+}
+
+.section-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Grid of topic cards */
+.cd-topics-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+/* Individual topic card */
+.cd-topic-card {
+  background: var(--card-bg);
+  border: 1px solid var(--warm-gray);
+  border-radius: 10px;
+  padding: 16px;
+  position: relative;
+  transition: box-shadow 0.2s, transform 0.2s;
+}
+
+.cd-topic-card:hover {
+  box-shadow: 0 4px 16px var(--shadow);
+  transform: translateY(-2px);
+}
+
+.cd-topic-card.has-new {
+  border-color: rgba(200, 113, 58, 0.35);
+}
+
+/* New reply badge on card */
+.cd-new-badge {
+  position: absolute;
+  top: -8px;
+  right: 12px;
+  background: var(--accent-amber);
+  color: white;
+  font-size: 10px;
+  font-weight: 600;
+  padding: 3px 10px;
+  border-radius: 12px;
+  letter-spacing: 0.3px;
+}
+
+/* Topic title link */
+.cd-topic-title {
+  font-family: 'Newsreader', serif;
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--ink);
+  text-decoration: none;
+  line-height: 1.35;
+  display: block;
+  margin-bottom: 6px;
+  transition: color 0.15s;
+}
+
+.cd-topic-title:hover {
+  color: var(--accent-amber);
+}
+
+/* Category tag pill */
+.cd-category-tag {
+  display: inline-block;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 3px 8px;
+  border-radius: 4px;
+  margin-bottom: 12px;
+  background: var(--warm-gray);
+  color: var(--ink);
+}
+
+/* Latest posts container */
+.cd-latest-posts {
+  border-top: 1px solid rgba(154, 145, 138, 0.12);
+  padding-top: 10px;
+}
+
+.cd-latest-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+  margin-bottom: 8px;
+}
+
+/* Single latest post row */
+.cd-latest-post {
+  margin-bottom: 8px;
+}
+
+.cd-latest-post:last-child {
+  margin-bottom: 0;
+}
+
+.cd-latest-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+
+.cd-latest-avatar {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.cd-latest-username {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.cd-latest-time {
+  font-size: 10px;
+  color: var(--muted);
+}
+
+.cd-latest-text {
+  font-size: 12px;
+  color: var(--muted);
+  line-height: 1.45;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  padding-left: 22px;
+}
+
+/* Card footer with actions */
+.cd-card-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(154, 145, 138, 0.12);
+}
+
+.cd-post-count {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.cd-remove-btn {
+  font-family: 'DM Sans', sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--accent-rose);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+
+.cd-remove-btn:hover {
+  background: rgba(179, 90, 90, 0.08);
+}
+
+/* Empty state for ChiefDelphi section */
+.cd-empty {
+  text-align: center;
+  padding: 48px 24px;
+  color: var(--muted);
+}
+
+.cd-empty .empty-checkmark {
+  width: 44px;
+  height: 44px;
+  margin: 0 auto 16px;
+  border-radius: 50%;
+  background: rgba(90, 107, 122, 0.08);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--accent-slate);
+}
+
+.cd-empty .empty-checkmark svg {
+  width: 20px;
+  height: 20px;
+}
+
+.cd-empty .empty-title {
+  font-family: 'Newsreader', serif;
+  font-size: 18px;
+  font-weight: 400;
+  color: var(--ink);
+  margin-bottom: 6px;
+}
+
+.cd-empty .empty-subtitle {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+/* Content script floating button */
+#cd-follow-btn {
+  position: fixed;
+  top: 80px;
+  right: 24px;
+  z-index: 9999;
+  font-family: 'DM Sans', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  padding: 10px 18px;
+  border-radius: 8px;
+  border: none;
+  background: var(--accent-amber);
+  color: white;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(26, 22, 19, 0.15);
+  transition: opacity 0.2s, transform 0.2s;
+}
+
+#cd-follow-btn:hover {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+#cd-follow-btn.cd-following {
+  background: var(--accent-sage);
+}
+
+#cd-follow-btn:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+/* Refresh spinning animation */
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+.refreshing svg {
+  animation: spin 0.8s linear infinite;
+}

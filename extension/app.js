@@ -285,6 +285,140 @@ async function dismissSavedTab(id) {
 
 
 /* ----------------------------------------------------------------
+   CHIEF DELPHI — Storage & API
+   ---------------------------------------------------------------- */
+
+let cdCategoryMap = null;
+let cdCategoryMapFetchedAt = 0;
+const CD_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+async function getCdTopics() {
+  const { cd_topics = [] } = await chrome.storage.local.get('cd_topics');
+  return cd_topics;
+}
+
+async function saveCdTopic(topic) {
+  const topics = await getCdTopics();
+  const existing = topics.find(t => String(t.id) === String(topic.id));
+  if (existing) {
+    Object.assign(existing, topic, { addedAt: existing.addedAt });
+  } else {
+    topics.push(topic);
+  }
+  await chrome.storage.local.set({ cd_topics: topics });
+}
+
+async function removeCdTopic(id) {
+  let topics = await getCdTopics();
+  topics = topics.filter(t => String(t.id) !== String(id));
+  await chrome.storage.local.set({ cd_topics: topics });
+}
+
+async function fetchTopicDetails(topicId) {
+  const res = await fetch(`https://www.chiefdelphi.com/t/${topicId}.json`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return res.json();
+}
+
+async function fetchLatestPosts(topicId, postIds) {
+  if (!postIds || postIds.length === 0) return [];
+  const params = postIds.map(id => `post_ids[]=${id}`).join('&');
+  const res = await fetch(`https://www.chiefdelphi.com/t/${topicId}/posts.json?${params}`);
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  const data = await res.json();
+  return data.post_stream?.posts || [];
+}
+
+async function getCategoryMap() {
+  const now = Date.now();
+  if (cdCategoryMap && (now - cdCategoryMapFetchedAt) < CD_CACHE_TTL_MS) {
+    return cdCategoryMap;
+  }
+  try {
+    const res = await fetch('https://www.chiefdelphi.com/categories.json');
+    if (!res.ok) throw new Error(`HTTP ${res.status}`);
+    const data = await res.json();
+    const map = {};
+    const walk = (list) => {
+      for (const c of list || []) {
+        map[c.id] = { name: c.name, color: c.color, textColor: c.text_color };
+        if (c.subcategory_list) walk(c.subcategory_list);
+      }
+    };
+    walk(data.category_list?.categories);
+    cdCategoryMap = map;
+    cdCategoryMapFetchedAt = now;
+    return map;
+  } catch (err) {
+    console.warn('[tab-out] Failed to fetch categories:', err);
+    return cdCategoryMap || {};
+  }
+}
+
+function stripHtml(html) {
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  return tmp.textContent || tmp.innerText || '';
+}
+
+/**
+ * refreshCdTopic(topic)
+ *
+ * Fetches the latest data for a followed topic and updates its cache.
+ * Returns the updated topic object.
+ */
+async function refreshCdTopic(topic) {
+  try {
+    const data = await fetchTopicDetails(topic.id);
+    const stream = data.post_stream?.stream || [];
+    const lastPostIds = stream.slice(-2);
+    const posts = lastPostIds.length > 0 ? await fetchLatestPosts(topic.id, lastPostIds) : [];
+
+    const refreshed = {
+      ...topic,
+      title: data.title || topic.title,
+      categoryId: data.category_id,
+      postsCount: data.posts_count,
+      highestPostNumber: data.highest_post_number,
+      lastPostedAt: data.last_posted_at,
+      latestPosts: posts.map(p => ({
+        id: p.id,
+        username: p.username,
+        avatarTemplate: p.avatar_template,
+        cooked: p.cooked,
+        text: stripHtml(p.cooked).trim().slice(0, 300),
+        postNumber: p.post_number,
+        createdAt: p.created_at,
+        updatedAt: p.updated_at,
+      })),
+      lastFetchedAt: new Date().toISOString(),
+    };
+    return refreshed;
+  } catch (err) {
+    console.warn(`[tab-out] Failed to refresh topic ${topic.id}:`, err);
+    return topic;
+  }
+}
+
+/**
+ * refreshAllCdTopics(topics, markRead)
+ *
+ * Refreshes all followed topics in parallel. Updates storage.
+ * markRead=true updates lastKnownCount to the current postsCount.
+ */
+async function refreshAllCdTopics(topics, markRead = false) {
+  const refreshed = await Promise.all(topics.map(t => refreshCdTopic(t)));
+  if (markRead) {
+    for (const t of refreshed) {
+      if (t.postsCount != null) t.lastKnownCount = t.postsCount;
+    }
+  }
+  await chrome.storage.local.set({ cd_topics: refreshed });
+  return refreshed;
+}
+
+
+/* ----------------------------------------------------------------
    UI HELPERS
    ---------------------------------------------------------------- */
 
@@ -1005,6 +1139,86 @@ function renderArchiveItem(item) {
 
 
 /* ----------------------------------------------------------------
+   CHIEF DELPHI — Renderers
+   ---------------------------------------------------------------- */
+
+/**
+ * renderChiefDelphiSection(topics)
+ *
+ * Renders the ChiefDelphi followed topics grid into index.html.
+ * Each topic card shows title, category, and latest reply preview.
+ */
+async function renderChiefDelphiSection(topics) {
+  const section = document.getElementById('chiefDelphiSection');
+  const grid    = document.getElementById('cdTopicsGrid');
+  const empty   = document.getElementById('cdEmpty');
+  if (!section) return;
+
+  if (!topics || topics.length === 0) {
+    section.style.display = 'none';
+    return;
+  }
+
+  section.style.display = 'block';
+  grid.style.display = 'grid';
+  empty.style.display = 'none';
+
+  const catMap = await getCategoryMap();
+  grid.innerHTML = topics.map(t => renderTopicCard(t, catMap)).join('');
+}
+
+/**
+ * renderTopicCard(topic, catMap)
+ *
+ * Builds HTML for one followed ChiefDelphi topic card.
+ */
+function renderTopicCard(topic, catMap) {
+  const safeTitle = (topic.title || 'Untitled').replace(/"/g, '&quot;');
+  const url       = topic.url || `https://www.chiefdelphi.com/t/${topic.slug}/${topic.id}`;
+
+  const category  = catMap[topic.categoryId] || { name: topic.categoryName || '', color: topic.categoryColor || '' };
+  const catStyle  = category.color ? `background:#${category.color}22;color:#${category.color};` : '';
+
+  const hasNew    = topic.postsCount && topic.lastKnownCount && topic.postsCount > topic.lastKnownCount;
+  const newCount  = hasNew ? topic.postsCount - topic.lastKnownCount : 0;
+
+  let latestHtml = '';
+  if (topic.latestPosts && topic.latestPosts.length > 0) {
+    const posts = topic.latestPosts.slice().reverse(); // chronological order
+    latestHtml = `
+      <div class="cd-latest-posts">
+        <div class="cd-latest-label">Latest replies</div>
+        ${posts.map(p => {
+          const avatar = p.avatarTemplate ? `https:${p.avatarTemplate.replace('{size}', '32')}` : '';
+          const ago = timeAgo(p.createdAt);
+          return `
+            <div class="cd-latest-post">
+              <div class="cd-latest-meta">
+                ${avatar ? `<img class="cd-latest-avatar" src="${avatar}" alt="" onerror="this.style.display='none'">` : ''}
+                <span class="cd-latest-username">${p.username}</span>
+                <span class="cd-latest-time">${ago}</span>
+              </div>
+              <div class="cd-latest-text">${(p.text || '').slice(0, 140)}${(p.text || '').length > 140 ? '…' : ''}</div>
+            </div>`;
+        }).join('')}
+      </div>`;
+  }
+
+  return `
+    <div class="cd-topic-card ${hasNew ? 'has-new' : ''}" data-cd-id="${topic.id}">
+      ${hasNew ? `<div class="cd-new-badge">${newCount} new</div>` : ''}
+      <a href="${url}" target="_blank" rel="noopener" class="cd-topic-title" title="${safeTitle}">${topic.title || 'Untitled'}</a>
+      ${category.name ? `<span class="cd-category-tag" style="${catStyle}">${category.name}</span>` : ''}
+      ${latestHtml}
+      <div class="cd-card-footer">
+        <span class="cd-post-count">${topic.postsCount || 0} posts</span>
+        <button class="cd-remove-btn" data-action="remove-cd-topic" data-cd-id="${topic.id}">Unfollow</button>
+      </div>
+    </div>`;
+}
+
+
+/* ----------------------------------------------------------------
    MAIN DASHBOARD RENDERER
    ---------------------------------------------------------------- */
 
@@ -1025,6 +1239,23 @@ async function renderStaticDashboard() {
   const dateEl     = document.getElementById('dateDisplay');
   if (greetingEl) greetingEl.textContent = getGreeting();
   if (dateEl)     dateEl.textContent     = getDateDisplay();
+
+  // --- Chief Delphi followed topics ---
+  try {
+    const cdTopics = await getCdTopics();
+    // Show cached data immediately, then refresh in background
+    await renderChiefDelphiSection(cdTopics);
+    if (cdTopics.length > 0) {
+      const now = Date.now();
+      const stale = cdTopics.some(t => !t.lastFetchedAt || (now - new Date(t.lastFetchedAt).getTime()) > CD_CACHE_TTL_MS);
+      if (stale) {
+        const refreshed = await refreshAllCdTopics(cdTopics, false);
+        await renderChiefDelphiSection(refreshed);
+      }
+    }
+  } catch (err) {
+    console.warn('[tab-out] ChiefDelphi render failed:', err);
+  }
 
   // --- Fetch tabs ---
   await fetchOpenTabs();
@@ -1429,6 +1660,54 @@ document.addEventListener('click', async (e) => {
     });
 
     showToast('All tabs closed. Fresh start.');
+    return;
+  }
+
+  // ---- Refresh ChiefDelphi topics ----
+  if (action === 'refresh-cd-topics') {
+    const btn = actionEl.closest('.action-btn') || actionEl;
+    btn.classList.add('refreshing');
+    try {
+      const topics = await getCdTopics();
+      if (topics.length > 0) {
+        const refreshed = await refreshAllCdTopics(topics, true);
+        await renderChiefDelphiSection(refreshed);
+        showToast('Topics refreshed');
+      }
+    } catch (err) {
+      console.warn('[tab-out] Refresh failed:', err);
+      showToast('Refresh failed');
+    } finally {
+      btn.classList.remove('refreshing');
+    }
+    return;
+  }
+
+  // ---- Remove (unfollow) a ChiefDelphi topic ----
+  if (action === 'remove-cd-topic') {
+    const id = actionEl.dataset.cdId;
+    if (!id) return;
+
+    await removeCdTopic(id);
+
+    const card = actionEl.closest('.cd-topic-card');
+    if (card) {
+      const rect = card.getBoundingClientRect();
+      shootConfetti(rect.left + rect.width / 2, rect.top + rect.height / 2);
+      card.style.transition = 'opacity 0.25s, transform 0.25s';
+      card.style.opacity = '0';
+      card.style.transform = 'scale(0.92)';
+      setTimeout(() => {
+        card.remove();
+        // Check if grid is now empty
+        const grid = document.getElementById('cdTopicsGrid');
+        if (grid && grid.children.length === 0) {
+          renderChiefDelphiSection([]);
+        }
+      }, 250);
+    }
+
+    showToast('Unfollowed');
     return;
   }
 });
