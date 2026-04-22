@@ -1163,8 +1163,20 @@ async function renderChiefDelphiSection(topics) {
   grid.style.display = 'grid';
   empty.style.display = 'none';
 
-  const catMap = await getCategoryMap();
+  // Render immediately with cached categories (or empty fallback)
+  // so tabs section isn't blocked waiting for a network request.
+  const catMap = cdCategoryMap || {};
   grid.innerHTML = topics.map(t => renderTopicCard(t, catMap)).join('');
+
+  // If the category map is stale/missing, fetch in background and re-render
+  const now = Date.now();
+  if (!cdCategoryMap || (now - cdCategoryMapFetchedAt) > CD_CACHE_TTL_MS) {
+    getCategoryMap().then(map => {
+      if (map && Object.keys(map).length > 0) {
+        grid.innerHTML = topics.map(t => renderTopicCard(t, map)).join('');
+      }
+    }).catch(() => {});
+  }
 }
 
 /**
@@ -1172,6 +1184,125 @@ async function renderChiefDelphiSection(topics) {
  *
  * Builds HTML for one followed ChiefDelphi topic card.
  */
+function fixAvatarUrl(template, size = 32) {
+  if (!template) return '';
+  let url = template.replace('{size}', String(size));
+  if (url.startsWith('//')) url = 'https:' + url;
+  if (url.startsWith('/')) url = 'https://www.chiefdelphi.com' + url;
+  return url;
+}
+
+function sanitizeCookedHtml(html) {
+  if (!html) return '';
+  const tmp = document.createElement('div');
+  tmp.innerHTML = html;
+  tmp.querySelectorAll('script, iframe, object, embed, form').forEach(el => el.remove());
+  tmp.querySelectorAll('*').forEach(el => {
+    for (const attr of Array.from(el.attributes)) {
+      if (attr.name.startsWith('on')) el.removeAttribute(attr.name);
+    }
+  });
+  return tmp.innerHTML;
+}
+
+function renderCdExpandedPosts(posts, topic) {
+  if (!posts || posts.length === 0) {
+    return '<div class="cd-detail-empty">No posts to show</div>';
+  }
+
+  const baseUrl = topic.url || `https://www.chiefdelphi.com/t/${topic.slug}/${topic.id}`;
+
+  const items = posts.map(p => {
+    const avatar = fixAvatarUrl(p.avatar_template, 32);
+    const ago = timeAgo(p.created_at);
+    const body = sanitizeCookedHtml(p.cooked);
+    const postUrl = p.post_number ? `${baseUrl}/${p.post_number}` : baseUrl;
+
+    return `
+      <div class="cd-post-item ${p.isNew ? 'is-new' : ''}" data-action="open-cd-post" data-post-url="${postUrl}">
+        <div class="cd-post-header">
+          ${avatar ? `<img class="cd-post-avatar" src="${avatar}" alt="">` : ''}
+          <div class="cd-post-meta">
+            <span class="cd-post-username">${p.username}</span>
+            <span class="cd-post-time">${ago}</span>
+          </div>
+          ${p.isNew ? '<span class="cd-post-new-tag">new</span>' : ''}
+        </div>
+        <div class="cd-post-body">${body}</div>
+      </div>`;
+  }).join('');
+
+  return `<div class="cd-posts-scroll">${items}</div>`;
+}
+
+async function expandCdTopic(topicId, detailEl) {
+  try {
+    const topics = await getCdTopics();
+    const topic = topics.find(t => String(t.id) === String(topicId));
+    if (!topic) return;
+
+    const data = await fetchTopicDetails(topicId);
+    const stream = data.post_stream?.stream || [];
+
+    const lastKnown = topic.lastKnownCount || 0;
+    const currentCount = data.posts_count || 0;
+    const hasNew = currentCount > lastKnown;
+
+    let targetIds = [];
+    if (hasNew) {
+      const newIds = stream.slice(lastKnown);
+      const contextIds = stream.slice(Math.max(0, lastKnown - 2), lastKnown);
+      targetIds = [...contextIds, ...newIds];
+    } else {
+      targetIds = stream.slice(-10);
+    }
+
+    targetIds = [...new Set(targetIds)].slice(-20);
+    const posts = targetIds.length > 0 ? await fetchLatestPosts(topicId, targetIds) : [];
+
+    const postsWithMeta = posts.map(p => {
+      const postIndex = stream.indexOf(p.id);
+      return { ...p, isNew: hasNew && postIndex >= lastKnown };
+    });
+
+    detailEl.innerHTML = renderCdExpandedPosts(postsWithMeta, topic);
+  } catch (err) {
+    console.warn('[tab-out] Expand topic failed:', err);
+    detailEl.innerHTML = '<div class="cd-detail-error">Failed to load posts</div>';
+  }
+}
+
+async function toggleCdTopic(card) {
+  const detail = card.querySelector('.cd-card-detail');
+  if (!detail) return;
+
+  const isExpanded = card.classList.contains('expanded');
+
+  if (isExpanded) {
+    card.classList.remove('expanded');
+    detail.style.display = 'none';
+    return;
+  }
+
+  // Close any other expanded cards
+  document.querySelectorAll('.cd-topic-card.expanded').forEach(c => {
+    if (c !== card) {
+      c.classList.remove('expanded');
+      const d = c.querySelector('.cd-card-detail');
+      if (d) d.style.display = 'none';
+    }
+  });
+
+  card.classList.add('expanded');
+  detail.style.display = 'block';
+
+  if (detail.dataset.loaded !== 'true') {
+    const topicId = card.dataset.cdId;
+    await expandCdTopic(topicId, detail);
+    detail.dataset.loaded = 'true';
+  }
+}
+
 function renderTopicCard(topic, catMap) {
   const safeTitle = (topic.title || 'Untitled').replace(/"/g, '&quot;');
   const url       = topic.url || `https://www.chiefdelphi.com/t/${topic.slug}/${topic.id}`;
@@ -1189,7 +1320,7 @@ function renderTopicCard(topic, catMap) {
       <div class="cd-latest-posts">
         <div class="cd-latest-label">Latest replies</div>
         ${posts.map(p => {
-          const avatar = p.avatarTemplate ? `https:${p.avatarTemplate.replace('{size}', '32')}` : '';
+          const avatar = fixAvatarUrl(p.avatarTemplate, 32);
           const ago = timeAgo(p.createdAt);
           return `
             <div class="cd-latest-post">
@@ -1207,12 +1338,17 @@ function renderTopicCard(topic, catMap) {
   return `
     <div class="cd-topic-card ${hasNew ? 'has-new' : ''}" data-cd-id="${topic.id}">
       ${hasNew ? `<div class="cd-new-badge">${newCount} new</div>` : ''}
-      <a href="${url}" target="_blank" rel="noopener" class="cd-topic-title" title="${safeTitle}">${topic.title || 'Untitled'}</a>
-      ${category.name ? `<span class="cd-category-tag" style="${catStyle}">${category.name}</span>` : ''}
-      ${latestHtml}
-      <div class="cd-card-footer">
-        <span class="cd-post-count">${topic.postsCount || 0} posts</span>
-        <button class="cd-remove-btn" data-action="remove-cd-topic" data-cd-id="${topic.id}">Unfollow</button>
+      <div class="cd-card-summary" data-action="toggle-cd-topic" data-cd-id="${topic.id}">
+        <a href="${url}" target="_blank" rel="noopener" class="cd-topic-title" title="${safeTitle}">${topic.title || 'Untitled'}</a>
+        ${category.name ? `<span class="cd-category-tag" style="${catStyle}">${category.name}</span>` : ''}
+        ${latestHtml}
+        <div class="cd-card-footer">
+          <span class="cd-post-count">${topic.postsCount || 0} posts</span>
+          <button class="cd-remove-btn" data-action="remove-cd-topic" data-cd-id="${topic.id}">Unfollow</button>
+        </div>
+      </div>
+      <div class="cd-card-detail" style="display:none">
+        <div class="cd-detail-loading">Loading posts...</div>
       </div>
     </div>`;
 }
@@ -1240,19 +1376,12 @@ async function renderStaticDashboard() {
   if (greetingEl) greetingEl.textContent = getGreeting();
   if (dateEl)     dateEl.textContent     = getDateDisplay();
 
-  // --- Chief Delphi followed topics ---
+  // --- Chief Delphi followed topics (non-blocking) ---
+  let cdTopics = [];
   try {
-    const cdTopics = await getCdTopics();
-    // Show cached data immediately, then refresh in background
-    await renderChiefDelphiSection(cdTopics);
-    if (cdTopics.length > 0) {
-      const now = Date.now();
-      const stale = cdTopics.some(t => !t.lastFetchedAt || (now - new Date(t.lastFetchedAt).getTime()) > CD_CACHE_TTL_MS);
-      if (stale) {
-        const refreshed = await refreshAllCdTopics(cdTopics, false);
-        await renderChiefDelphiSection(refreshed);
-      }
-    }
+    cdTopics = await getCdTopics();
+    // Render from cache immediately without blocking tabs
+    renderChiefDelphiSection(cdTopics);
   } catch (err) {
     console.warn('[tab-out] ChiefDelphi render failed:', err);
   }
@@ -1397,6 +1526,17 @@ async function renderStaticDashboard() {
 
   // --- Render "Saved for Later" column ---
   await renderDeferredColumn();
+
+  // --- Background refresh of ChiefDelphi topics (after everything else is painted) ---
+  if (cdTopics.length > 0) {
+    const now = Date.now();
+    const stale = cdTopics.some(t => !t.lastFetchedAt || (now - new Date(t.lastFetchedAt).getTime()) > CD_CACHE_TTL_MS);
+    if (stale) {
+      refreshAllCdTopics(cdTopics, false)
+        .then(refreshed => renderChiefDelphiSection(refreshed))
+        .catch(err => console.warn('[tab-out] Background CD refresh failed:', err));
+    }
+  }
 }
 
 async function renderDashboard() {
@@ -1660,6 +1800,23 @@ document.addEventListener('click', async (e) => {
     });
 
     showToast('All tabs closed. Fresh start.');
+    return;
+  }
+
+  // ---- Toggle expand/collapse a ChiefDelphi topic card ----
+  if (action === 'toggle-cd-topic') {
+    // Don't expand if clicking a link or button inside the summary
+    if (e.target.closest('a, button')) return;
+    const card = actionEl.closest('.cd-topic-card');
+    if (card) await toggleCdTopic(card);
+    return;
+  }
+
+  // ---- Open a specific ChiefDelphi post ----
+  if (action === 'open-cd-post') {
+    if (e.target.closest('a')) return;
+    const url = actionEl.dataset.postUrl;
+    if (url) window.open(url, '_blank');
     return;
   }
 

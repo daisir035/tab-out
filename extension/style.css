@@ -1334,6 +1334,179 @@ footer { animation: fadeUp 0.5s ease 0.65s both; }
   background: rgba(179, 90, 90, 0.08);
 }
 
+/* ---- Card expand / detail panel ---- */
+.cd-card-summary {
+  cursor: pointer;
+}
+
+.cd-card-detail {
+  display: none;
+  max-height: 420px;
+  overflow-y: auto;
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(154, 145, 138, 0.15);
+}
+
+.cd-topic-card.expanded .cd-card-detail {
+  display: block;
+}
+
+.cd-posts-scroll {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.cd-post-item {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: rgba(154, 145, 138, 0.04);
+  border-left: 3px solid transparent;
+  cursor: pointer;
+}
+
+.cd-post-item.is-new {
+  background: rgba(200, 113, 58, 0.06);
+  border-left-color: var(--accent-amber);
+}
+
+.cd-post-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.cd-post-avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.cd-post-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex: 1;
+  min-width: 0;
+}
+
+.cd-post-username {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ink);
+}
+
+.cd-post-time {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.cd-post-new-tag {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: white;
+  background: var(--accent-amber);
+  padding: 1px 6px;
+  border-radius: 4px;
+  flex-shrink: 0;
+}
+
+.cd-post-body {
+  font-size: 12px;
+  color: var(--ink);
+  line-height: 1.5;
+  word-break: break-word;
+}
+
+.cd-post-body p {
+  margin-bottom: 8px;
+}
+
+.cd-post-body p:last-child {
+  margin-bottom: 0;
+}
+
+.cd-post-body a {
+  color: var(--accent-amber);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.cd-post-body img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+  margin: 4px 0;
+}
+
+/* Discourse quote blocks — dark background */
+.cd-post-body aside.quote,
+.cd-post-body blockquote {
+  background: rgba(26, 22, 19, 0.05);
+  border-left: 3px solid var(--warm-gray);
+  border-radius: 6px;
+  padding: 10px 12px;
+  margin: 8px 0;
+}
+
+.cd-post-body aside.quote .title {
+  font-weight: 600;
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.cd-post-body aside.quote .title a {
+  color: var(--ink);
+}
+
+.cd-post-body aside.quote .avatar {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+}
+
+.cd-post-body pre {
+  background: rgba(26, 22, 19, 0.05);
+  padding: 10px 12px;
+  border-radius: 6px;
+  overflow-x: auto;
+  font-size: 11px;
+  margin: 8px 0;
+}
+
+.cd-post-body code {
+  background: rgba(26, 22, 19, 0.05);
+  padding: 1px 4px;
+  border-radius: 3px;
+  font-size: 11px;
+}
+
+.cd-post-body ul,
+.cd-post-body ol {
+  padding-left: 20px;
+  margin-bottom: 8px;
+}
+
+.cd-detail-loading,
+.cd-detail-error,
+.cd-detail-empty {
+  font-size: 13px;
+  color: var(--muted);
+  padding: 16px 0;
+  text-align: center;
+}
+
+.cd-detail-error {
+  color: var(--accent-rose);
+}
+
 /* Empty state for ChiefDelphi section */
 .cd-empty {
   text-align: center;
