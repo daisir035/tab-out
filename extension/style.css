@@ -1444,6 +1444,17 @@ footer { animation: fadeUp 0.5s ease 0.65s both; }
   margin: 4px 0;
 }
 
+/* Discourse lightbox — remove extra whitespace and hide metadata */
+.cd-post-body .lightbox-wrapper,
+.cd-post-body .lightbox {
+  display: inline-block;
+  max-width: 100%;
+}
+
+.cd-post-body .meta {
+  display: none !important;
+}
+
 /* Discourse quote blocks — dark background */
 .cd-post-body aside.quote,
 .cd-post-body blockquote {

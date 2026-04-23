@@ -1196,12 +1196,54 @@ function sanitizeCookedHtml(html) {
   if (!html) return '';
   const tmp = document.createElement('div');
   tmp.innerHTML = html;
-  tmp.querySelectorAll('script, iframe, object, embed, form').forEach(el => el.remove());
+
+  // Security: remove dangerous elements and event handlers
+  tmp.querySelectorAll('script, iframe, object, embed, form, .meta').forEach(el => el.remove());
   tmp.querySelectorAll('*').forEach(el => {
     for (const attr of Array.from(el.attributes)) {
       if (attr.name.startsWith('on')) el.removeAttribute(attr.name);
     }
   });
+
+  // Replace bulky onebox previews with simple links
+  tmp.querySelectorAll('.youtube-onebox').forEach(el => {
+    const a = el.querySelector('a');
+    if (a) {
+      const url = a.getAttribute('href') || '';
+      const title = a.getAttribute('title') || el.dataset.videoTitle || 'YouTube video';
+      const link = document.createElement('a');
+      link.href = url;
+      link.target = '_blank';
+      link.rel = 'noopener nofollow ugc';
+      link.textContent = `▶ ${title}`;
+      el.replaceWith(link);
+    } else {
+      el.remove();
+    }
+  });
+
+  tmp.querySelectorAll('a.onebox').forEach(el => {
+    if (el.classList.contains('inline-onebox')) return;
+    const url = el.getAttribute('href') || '';
+    el.innerHTML = '';
+    el.textContent = url;
+  });
+
+  tmp.querySelectorAll('aside.onebox').forEach(el => {
+    const a = el.querySelector('a');
+    if (a) {
+      const url = a.getAttribute('href') || '';
+      const link = document.createElement('a');
+      link.href = url;
+      link.target = '_blank';
+      link.rel = 'noopener nofollow ugc';
+      link.textContent = url;
+      el.replaceWith(link);
+    } else {
+      el.remove();
+    }
+  });
+
   return tmp.innerHTML;
 }
 
