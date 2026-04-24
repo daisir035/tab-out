@@ -30,8 +30,6 @@ The agent will walk you through it. Takes about 1 minute.
 - **Save for later** bookmark tabs to a checklist before closing them
 - **Localhost grouping** shows port numbers next to each tab so you can tell your vibe coding projects apart
 - **Expandable groups** show the first 8 tabs with a clickable "+N more"
-- **Chief Delphi topic following** follow Discourse topics and see latest replies right on your new tab page
-- **Zoomable topic cards** click a Chief Delphi card to expand it into a large overlay without disturbing the grid layout
 - **100% local** your data never leaves your machine
 - **Pure Chrome extension** no server, no Node.js, no npm, no setup beyond loading the extension
 
