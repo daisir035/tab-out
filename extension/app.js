@@ -1252,7 +1252,9 @@ function renderCdExpandedPosts(posts, topic) {
     return '<div class="cd-detail-empty">No posts to show</div>';
   }
 
-  const baseUrl = topic.url || `https://www.chiefdelphi.com/t/${topic.slug}/${topic.id}`;
+  // Always build base URL from slug + id so trailing post numbers from the
+  // original follow URL (e.g. /t/.../519109/11) don't leak into per-post links.
+  const baseUrl = `https://www.chiefdelphi.com/t/${topic.slug}/${topic.id}`;
 
   const items = posts.map(p => {
     const avatar = fixAvatarUrl(p.avatar_template, 32);
@@ -1342,6 +1344,123 @@ async function toggleCdTopic(card) {
     const topicId = card.dataset.cdId;
     await expandCdTopic(topicId, detail);
     detail.dataset.loaded = 'true';
+  }
+}
+
+/* ----------------------------------------------------------------
+   CHIEF DELPHI — Card Zoom (lightweight overlay expansion)
+   ---------------------------------------------------------------- */
+
+let activeZoomClone = null;
+let activeZoomOverlay = null;
+let originalBodyOverflow = '';
+
+function onZoomKey(e) {
+  if (e.key === 'Escape') unzoomCdCard();
+}
+
+function unzoomCdCard() {
+  if (!activeZoomClone) return;
+
+  activeZoomClone.classList.remove('zoomed');
+  activeZoomClone.style.opacity = '0';
+  activeZoomClone.style.transform = 'scale(0.96)';
+  if (activeZoomOverlay) activeZoomOverlay.classList.remove('visible');
+
+  setTimeout(() => {
+    if (activeZoomClone) { activeZoomClone.remove(); activeZoomClone = null; }
+    if (activeZoomOverlay) { activeZoomOverlay.remove(); activeZoomOverlay = null; }
+    document.removeEventListener('keydown', onZoomKey);
+    document.body.style.overflow = originalBodyOverflow;
+  }, 300);
+}
+
+async function zoomCdCard(card) {
+  if (activeZoomClone) return;
+
+  const rect = card.getBoundingClientRect();
+  const clone = card.cloneNode(true);
+
+  // Prevent the clone from affecting grid layout
+  clone.classList.remove('expanded');
+  clone.classList.add('cd-card-clone');
+
+  // Ensure detail panel is visible in zoomed view
+  const detail = clone.querySelector('.cd-card-detail');
+  if (detail) {
+    detail.style.display = 'block';
+    detail.style.maxHeight = 'none';
+    detail.style.marginTop = '12px';
+    detail.style.paddingTop = '12px';
+    detail.style.borderTop = '1px solid rgba(154, 145, 138, 0.15)';
+  }
+
+  // Close button
+  const closeBtn = document.createElement('button');
+  closeBtn.className = 'cd-zoom-close';
+  closeBtn.title = 'Close';
+  closeBtn.innerHTML = ICONS.close;
+  closeBtn.addEventListener('click', (e) => { e.stopPropagation(); unzoomCdCard(); });
+  clone.appendChild(closeBtn);
+
+  // Compute target geometry
+  const viewportW = window.innerWidth;
+  const viewportH = window.innerHeight;
+  const targetW = Math.min(1100, viewportW - 32);
+  const targetLeft = (viewportW - targetW) / 2;
+  const targetTop = 40;
+
+  // Offset from target position back to the original card's location
+  const startX = rect.left - targetLeft;
+  const startY = rect.top - targetTop;
+
+  // Anchor clone at the target center, then translate it to look like it's
+  // coming from the original card. We animate width + translate.
+  clone.style.left = targetLeft + 'px';
+  clone.style.top = targetTop + 'px';
+  clone.style.width = rect.width + 'px';
+  clone.style.transform = `translate(${startX}px, ${startY}px)`;
+
+  document.body.appendChild(clone);
+
+  // Backdrop overlay
+  const overlay = document.createElement('div');
+  overlay.className = 'cd-zoom-overlay';
+  overlay.addEventListener('click', unzoomCdCard);
+  document.body.appendChild(overlay);
+
+  activeZoomClone = clone;
+  activeZoomOverlay = overlay;
+
+  // Lock body scroll while zoomed
+  originalBodyOverflow = document.body.style.overflow;
+  document.body.style.overflow = 'hidden';
+
+  // Animate in (double rAF ensures styles are flushed before transition)
+  requestAnimationFrame(() => {
+    requestAnimationFrame(() => {
+      overlay.classList.add('visible');
+      clone.classList.add('zoomed');
+      clone.style.width = targetW + 'px';
+      clone.style.transform = 'translate(0, 0)';
+    });
+  });
+
+  document.addEventListener('keydown', onZoomKey);
+
+  // Load detail content if not already cached
+  const origDetail = card.querySelector('.cd-card-detail');
+  if (origDetail && origDetail.dataset.loaded !== 'true') {
+    try {
+      await expandCdTopic(card.dataset.cdId, origDetail);
+      origDetail.dataset.loaded = 'true';
+      if (activeZoomClone) {
+        const cloneDetail = activeZoomClone.querySelector('.cd-card-detail');
+        if (cloneDetail) cloneDetail.innerHTML = origDetail.innerHTML;
+      }
+    } catch (err) {
+      console.warn('[tab-out] Zoom content load failed:', err);
+    }
   }
 }
 
@@ -1845,12 +1964,20 @@ document.addEventListener('click', async (e) => {
     return;
   }
 
-  // ---- Toggle expand/collapse a ChiefDelphi topic card ----
+  // ---- Zoom a ChiefDelphi topic card ----
   if (action === 'toggle-cd-topic') {
-    // Don't expand if clicking a link or button inside the summary
+    // Don't zoom if clicking a link or button inside the summary
     if (e.target.closest('a, button')) return;
     const card = actionEl.closest('.cd-topic-card');
-    if (card) await toggleCdTopic(card);
+    if (!card) return;
+
+    // If clicking inside the zoom clone, close it
+    if (card.classList.contains('cd-card-clone')) {
+      unzoomCdCard();
+      return;
+    }
+
+    await zoomCdCard(card);
     return;
   }
 
@@ -1887,9 +2014,15 @@ document.addEventListener('click', async (e) => {
     const id = actionEl.dataset.cdId;
     if (!id) return;
 
+    let card = actionEl.closest('.cd-topic-card');
+    const inClone = actionEl.closest('.cd-card-clone');
+    if (inClone) {
+      unzoomCdCard();
+      card = document.querySelector(`.cd-topic-card[data-cd-id="${id}"]:not(.cd-card-clone)`);
+    }
+
     await removeCdTopic(id);
 
-    const card = actionEl.closest('.cd-topic-card');
     if (card) {
       const rect = card.getBoundingClientRect();
       shootConfetti(rect.left + rect.width / 2, rect.top + rect.height / 2);

@@ -1348,6 +1348,10 @@ footer { animation: fadeUp 0.5s ease 0.65s both; }
   border-top: 1px solid rgba(154, 145, 138, 0.15);
 }
 
+.cd-topic-card.expanded {
+  grid-column: 1 / -1;
+}
+
 .cd-topic-card.expanded .cd-card-detail {
   display: block;
 }
@@ -1516,6 +1520,88 @@ footer { animation: fadeUp 0.5s ease 0.65s both; }
 
 .cd-detail-error {
   color: var(--accent-rose);
+}
+
+/* ---- Card zoom overlay (lightweight, GPU-composited) ---- */
+.cd-card-clone {
+  position: fixed;
+  z-index: 1000;
+  margin: 0;
+  transition:
+    transform 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+    width 0.4s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 0.3s ease;
+  box-shadow: 0 24px 64px rgba(26, 22, 19, 0.18);
+  overflow-y: auto;
+  scrollbar-width: thin;
+  cursor: default;
+  background: var(--card-bg);
+  max-height: calc(100vh - 80px);
+  overscroll-behavior: contain;
+}
+
+/* Hide scrollbar for WebKit while keeping functionality */
+.cd-card-clone::-webkit-scrollbar {
+  width: 6px;
+}
+.cd-card-clone::-webkit-scrollbar-thumb {
+  background: rgba(154, 145, 138, 0.25);
+  border-radius: 3px;
+}
+
+/* Show full text and detail content when zoomed */
+.cd-card-clone .cd-latest-text {
+  -webkit-line-clamp: unset;
+  display: block;
+}
+.cd-card-clone .cd-card-detail {
+  max-height: none !important;
+}
+
+/* Overlay backdrop — no blur to keep GPU load minimal */
+.cd-zoom-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(26, 22, 19, 0.25);
+  z-index: 999;
+  opacity: 0;
+  transition: opacity 0.35s ease;
+  cursor: zoom-out;
+}
+
+.cd-zoom-overlay.visible {
+  opacity: 1;
+}
+
+/* Close button inside zoomed card */
+.cd-zoom-close {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  border: none;
+  background: rgba(26, 22, 19, 0.07);
+  color: var(--muted);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  transition: background 0.15s, color 0.15s, transform 0.15s;
+  z-index: 2;
+}
+
+.cd-zoom-close:hover {
+  background: rgba(26, 22, 19, 0.14);
+  color: var(--ink);
+  transform: scale(1.05);
+}
+
+.cd-zoom-close svg {
+  width: 14px;
+  height: 14px;
 }
 
 /* Empty state for ChiefDelphi section */
